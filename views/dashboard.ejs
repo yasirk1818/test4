@@ -1,0 +1,73 @@
+<h2>Dashboard</h2>
+<button onclick="addDevice()">Add Device</button>
+
+<div id="devices"></div>
+
+<!-- QR Modal -->
+<div id="qrModal" style="display:none;">
+    <img id="qrImage" src="" alt="Scan QR">
+    <button onclick="closeQr()">Close</button>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const socket = io();
+    let currentSession = null;
+
+    async function loadDevices() {
+        const res = await fetch('/devices/list');
+        const devices = await res.json();
+        const div = document.getElementById('devices');
+        div.innerHTML = devices.map(d => `
+            <div style="border:1px solid #ccc;padding:10px;margin:10px;">
+                <strong>Device: ${d.sessionId}</strong> | Status: <span id="status-${d._id}">${d.status}</span>
+                <br>
+                <button onclick="connect('${d._id}', '${d.sessionId}')">Connect</button>
+                <button onclick="disconnect('${d._id}')">Disconnect</button>
+                <button onclick="remove('${d._id}')">Delete</button>
+                <button onclick="manage('${d._id}')">Manage</button>
+            </div>
+        `).join('');
+    }
+
+    function addDevice() {
+        fetch('/devices/add', { method: 'POST', body: new URLSearchParams({ name: 'My Device' }) })
+            .then(() => loadDevices());
+    }
+
+    function connect(id, sessionId) {
+        fetch(`/devices/connect/${id}`, { method: 'POST' })
+            .then(() => {
+                currentSession = sessionId;
+                socket.emit('join-room', sessionId);
+                document.getElementById('qrModal').style.display = 'block';
+            });
+    }
+
+    function disconnect(id) {
+        fetch(`/devices/disconnect/${id}`, { method: 'POST' })
+            .then(() => location.reload());
+    }
+
+    function remove(id) {
+        fetch(`/devices/delete/${id}`, { method: 'DELETE' })
+            .then(() => location.reload());
+    }
+
+    function closeQr() {
+        document.getElementById('qrModal').style.display = 'none';
+    }
+
+    socket.on('qr', (src) => {
+        document.getElementById('qrImage').src = src;
+    });
+
+    socket.on('status', (status) => {
+        if (currentSession) {
+            const el = document.querySelector(`#status span`);
+            if (el) el.textContent = status;
+        }
+    });
+
+    window.onload = loadDevices;
+</script>
